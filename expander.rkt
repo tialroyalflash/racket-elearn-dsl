@@ -1,10 +1,10 @@
 #lang racket
 (require (for-syntax syntax/parse))
+(require racket/date) ; Required for timestamps
 
 ;; =============================================================================
 ;; DSL Exports
 ;; =============================================================================
-;; Standard Racket forms and custom DSL keywords for the e-learning system
 (provide (all-from-out racket)
          pathway if-score course-status assignment calculate-grade 
          process-csv-report)
@@ -12,7 +12,6 @@
 ;; =============================================================================
 ;; State Management
 ;; =============================================================================
-;; Thread-safe boxes to manage student state during batch processing
 (define current-student-score (box 0))
 (define current-student-name (box ""))
 
@@ -20,29 +19,30 @@
 ;; Macro Definitions (Syntax)
 ;; =============================================================================
 
-;; 1. Pathway Control Macro: Logic for branching based on results
+;; 1. Pathway Control Macro
 (define-syntax (pathway stx)
   (syntax-parse stx
     [(_ condition:expr then-part:expr else-part:expr)
      #'(let ([result condition])
-         (printf ">>> [PATHWAY] ")
-         (if result
-             (printf "Decision: PASS. Recommended: ~a\n" then-part)
-             (printf "Decision: FAIL. Recommended: ~a\n" else-part)))]))
+         (define msg (if result
+                         (format "Decision: PASS. Recommended: ~a" then-part)
+                         (format "Decision: FAIL. Recommended: ~a" else-part)))
+         (printf ">>> [PATHWAY] ~a\n" msg)
+         msg)]))
 
-;; 2. Score Evaluation Helper: Accesses the current student's score in the box
+;; 2. Score Evaluation Helper
 (define-syntax (if-score stx)
   (syntax-parse stx
     [(_ op:id threshold:number)
      #'(op (unbox current-student-score) threshold)]))
 
-;; 3. Individual Assignment Macro: Used for calculating specific task scores
+;; 3. Individual Assignment Macro
 (define-syntax (assignment stx)
   (syntax-parse stx
     [(_ name:str #:weight w:number #:score s:number)
      #'(list name (* w s))]))
 
-;; 4. Grade Calculation Macro: Aggregates multiple assignments (Legacy Support)
+;; 4. Grade Calculation Macro (Added back to fix the error)
 (define-syntax (calculate-grade stx)
   (syntax-parse stx
     [(_ assignments ...)
@@ -58,43 +58,52 @@
 ;; Internal Core Logic
 ;; =============================================================================
 
-;; Internal function to process UoPeople grading logic for CSV rows
 (define (internal-calculate-grade name scores)
-  (let* ([w-lj (* 0.20 (list-ref scores 0))] ; Learning Journal
-         [w-df (* 0.10 (list-ref scores 1))] ; Discussion Forum
-         [w-pa (* 0.30 (list-ref scores 2))] ; Programming Assignment
-         [w-gq (* 0.40 (list-ref scores 3))] ; Graded Quiz
+  (let* ([w-lj (* 0.20 (list-ref scores 0))]
+         [w-df (* 0.10 (list-ref scores 1))]
+         [w-pa (* 0.30 (list-ref scores 2))]
+         [w-gq (* 0.40 (list-ref scores 3))]
          [total (+ w-lj w-df w-pa w-gq)])
     (set-box! current-student-name name)
     (set-box! current-student-score total)
-    (printf "\n--- Report for Student: ~a ---\n" name)
-    (printf "Calculated Final Grade: ~a\n" total)
-    total))
+    (define report (format "\n--- Report for Student: ~a ---\nCalculated Final Grade: ~a\n" name total))
+    (display report)
+    report))
 
 ;; =============================================================================
-;; CSV Processing Logic
+;; CSV Processing & File Logging Logic
 ;; =============================================================================
 
-;; Orchestrates the batch processing of students from a CSV file
-(define (process-csv-report file-path)
-  (let* ([lines (file->lines file-path)]
-         [data-lines (cdr lines)]) ; Skip header
-    (for ([line data-lines])
-      (let* ([fields (string-split line ",")]
-             [name (string-trim (first fields) "\"")]
-             [scores (map string->number (rest fields))])
+(define (process-csv-report input-path)
+  (let* ([output-path "data/results.txt"]
+         [lines (file->lines input-path)]
+         [data-lines (cdr lines)])
+    
+    (call-with-output-file output-path
+      #:exists 'replace
+      (lambda (out-port)
+        ;; Add a header with a date
+        (date-display-format 'iso-8601)
+        (fprintf out-port "UoPeople DSL Report - Generated on ~a\n" (date->string (current-date) #t))
+        (fprintf out-port "==================================================\n")
         
-        ;; Perform grading logic
-        (internal-calculate-grade name scores)
-        
-        ;; Execute branching logic
-        (pathway (if-score > 70)
-                 "Proceed to NEXT COURSE"
-                 "Assign REMEDIAL MODULES")))))
+        (for ([line data-lines])
+          (let* ([fields (string-split line ",")]
+                 [name (string-trim (first fields) "\"")]
+                 [scores (map string->number (rest fields))])
+            
+            (define grade-report (internal-calculate-grade name scores))
+            (display grade-report out-port)
+            
+            (define pathway-msg (pathway (if-score > 70)
+                                         "Proceed to NEXT COURSE"
+                                         "Assign REMEDIAL MODULES"))
+            (fprintf out-port ">>> [PATHWAY] ~a\n" pathway-msg)))))
+    
+    (printf "\n[SUCCESS] Results saved to ~a\n" output-path)))
 
 ;; =============================================================================
 ;; Runtime Functions
 ;; =============================================================================
-
 (define (course-status name)
   (printf "\n--- Course Status Check: ~a ---\n" name))

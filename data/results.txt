@@ -1,0 +1,14 @@
+UoPeople DSL Report - Generated on 2026-01-06T20:15:18
+==================================================
+
+--- Report for Student: Taku (Pass Case) ---
+Calculated Final Grade: 89.6
+>>> [PATHWAY] Decision: PASS. Recommended: Proceed to NEXT COURSE
+
+--- Report for Student: John (Fail Case) ---
+Calculated Final Grade: 30.0
+>>> [PATHWAY] Decision: FAIL. Recommended: Assign REMEDIAL MODULES
+
+--- Report for Student: Alice (Border Case) ---
+Calculated Final Grade: 69.0
+>>> [PATHWAY] Decision: FAIL. Recommended: Assign REMEDIAL MODULES
