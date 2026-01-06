@@ -1,0 +1,4 @@
+name,learning_journal,discussion_forum,programming_assignment,graded_quiz
+"Taku (Pass Case)",95,90,92,85
+"John (Fail Case)",40,50,30,20
+"Alice (Border Case)",75,70,70,65
